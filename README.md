@@ -38,7 +38,7 @@ As `UnorderedSet` I use [unordered_dense](https://github.com/martinus/unordered_
 
 #### Implementation
 
-I use a strategy of exponential blocks - for x64 system I store a sequence of block where block entry index is a power of two (sum(2^0^ + ... + 2^63^ ) == 2^64^ - 1). Inside the first block, we store 2 elements 2^0^ + 1. To search a vacant block, I use msb/lsb intrinsic. Also, for each memory block, I store a bit set which indicates is an element or a skip node list.
+I use a strategy of exponential blocks - for x64 system I store a sequence of block where block entry index is a power of two (sum($2^0$ + ... + $2^{63}$ ) == $2^{64}$ - 1). Inside the first block, we store 2 elements $2^0$ + 1. To search a vacant block, I use msb/lsb intrinsic. Also, for each memory block, I store a bit set which indicates is an element or a skip node list.
 
 **Exponential Structure**
 ![Exponential Structure](image/ExponentialStructure.png)
@@ -49,3 +49,4 @@ I embedded a free list approach to search free ranges, and inside each skip list
 ![Skip List Structure](image/SkipNodeStructure.png)
 
 Also, when I deallocate an element, I track the last empty block, and if I have 2 empty blocks, deallocate the largest block to reduce memory consumption. Also, the element size must be >= 16 bytes because `SkipNodeHead` and `SkipNodeTail` of the skip node are 16 bytes. The pool doesn't uses templates, because I want to use it dynamicaly without any type, probably templates by type can improve performance in some cases.
+
