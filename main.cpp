@@ -203,7 +203,7 @@ private:
             bench.TimeScope(Bench::KoPoolDeallocate, [&]() {
 
                 //_pPool->DeallocateBytesByID(id);
-                //_pPool->DeallocateBytesBySubPoolID(_datas.back(), subPoolID);
+                //_pPool->DeallocateBytesByPtrAndSubPoolID(_datas.back(), subPoolID);
                 _pPool->DeallocateBytesByPtr(_datas.back());
             });
 
