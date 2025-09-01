@@ -2,6 +2,22 @@
 
 namespace {
 
+    void* AlignedMalloc(const size_t sizeInBytes, const size_t alignment) {
+#if defined(_MSC_VER)
+        return _aligned_malloc(sizeInBytes, alignment);
+#else
+        return std::aligned_alloc(alignment, sizeInBytes);
+#endif
+    }
+
+    void AlignedFree(void* ptr) {
+#if defined(_MSC_VER)
+        _aligned_free(ptr);
+#else
+        std::free(ptr);
+#endif
+    }
+
     inline size_t CeilDiv(const size_t x, const size_t y) {
         return x / y + (x % y != 0 ? 1 : 0);
     }
@@ -44,7 +60,7 @@ void KoPoolIteratable::SubPoolsUniquePtrDeleter::operator()(SubPools* ptr) const
     ptr->sortedPointersSize = 0;
     ptr->sortedPointers = { SortedPointer{} };
 
-    _aligned_free(ptr);
+    AlignedFree(ptr);
 }
 
 KoPoolIteratable::KoPoolIteratable(const Opt& opt) {
@@ -87,7 +103,7 @@ KoPoolIteratable::AllocBytesResult KoPoolIteratable::AllocateBytes() noexcept {
 
     if (!_pSubPools) {
 
-        SubPools* pSubPools = reinterpret_cast<SubPools*>(_aligned_malloc(sizeof(SubPools), alignof(SubPools)));
+        SubPools* pSubPools = reinterpret_cast<SubPools*>(AlignedMalloc(sizeof(SubPools), alignof(SubPools)));
         if (!pSubPools) {
             return AllocBytesResult{};
         }
@@ -108,7 +124,7 @@ KoPoolIteratable::AllocBytesResult KoPoolIteratable::AllocateBytes() noexcept {
     if (!_pSubPools->pointers[subPoolID]) {
 
         _pSubPools->pointers[subPoolID] = reinterpret_cast<uint8_t*>(
-            _aligned_malloc(size * _opt.elementSizeInBytes, _opt.elementAlignment)
+            AlignedMalloc(size * _opt.elementSizeInBytes, _opt.elementAlignment)
         );
 
         if (!_pSubPools->pointers[subPoolID]) {
@@ -116,12 +132,12 @@ KoPoolIteratable::AllocBytesResult KoPoolIteratable::AllocateBytes() noexcept {
         }
 
         _pSubPools->pools[subPoolID].pPrevFreeSkipNodeTail = reinterpret_cast<SkipNodeTail*>(
-            _aligned_malloc(CeilDiv(size, DIGITS) * sizeof(USize), alignof(USize))
+            AlignedMalloc(CeilDiv(size, DIGITS) * sizeof(USize), alignof(USize))
         );
 
         if (!_pSubPools->pools[subPoolID].pPrevFreeSkipNodeTail) {
 
-            _aligned_free(_pSubPools->pointers[subPoolID]);
+            AlignedFree(_pSubPools->pointers[subPoolID]);
             _pSubPools->pointers[subPoolID] = nullptr;
 
             return AllocBytesResult{};
@@ -450,10 +466,10 @@ void KoPoolIteratable::RemoveSortedPointer(const USize subPoolID) noexcept {
 
 void KoPoolIteratable::DeallocateSubPoolMemory(SubPools& subPool, const USize subPoolID) noexcept {
 
-    _aligned_free(subPool.pointers[subPoolID]);
+    AlignedFree(subPool.pointers[subPoolID]);
     subPool.pointers[subPoolID] = nullptr;
 
-    _aligned_free(subPool.pools[subPoolID].pPrevFreeSkipNodeTail);
+    AlignedFree(subPool.pools[subPoolID].pPrevFreeSkipNodeTail);
     subPool.pools[subPoolID].pPrevFreeSkipNodeTail = nullptr;
 
     subPool.pools[subPoolID].pNextFreeSkipNodeHead = nullptr;
