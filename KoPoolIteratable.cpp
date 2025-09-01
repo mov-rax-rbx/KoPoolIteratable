@@ -83,13 +83,13 @@ bool KoPoolIteratable::IsEmpty() const noexcept {
     return _subPoolsWhichHaveAtLeastOneElement == 0;
 }
 
-uint8_t* KoPoolIteratable::AllocateBytes() noexcept {
+KoPoolIteratable::AllocBytesResult KoPoolIteratable::AllocateBytes() noexcept {
 
     if (!_pSubPools) {
 
         SubPools* pSubPools = reinterpret_cast<SubPools*>(_aligned_malloc(sizeof(SubPools), alignof(SubPools)));
         if (!pSubPools) {
-            return nullptr;
+            return AllocBytesResult{};
         }
 
         new (pSubPools) SubPools{};
@@ -112,7 +112,7 @@ uint8_t* KoPoolIteratable::AllocateBytes() noexcept {
         );
 
         if (!_pSubPools->pointers[subPoolID]) {
-            return nullptr;
+            return AllocBytesResult{};
         }
 
         _pSubPools->pools[subPoolID].pPrevFreeSkipNodeTail = reinterpret_cast<SkipNodeTail*>(
@@ -122,7 +122,9 @@ uint8_t* KoPoolIteratable::AllocateBytes() noexcept {
         if (!_pSubPools->pools[subPoolID].pPrevFreeSkipNodeTail) {
 
             _aligned_free(_pSubPools->pointers[subPoolID]);
-            return nullptr;
+            _pSubPools->pointers[subPoolID] = nullptr;
+
+            return AllocBytesResult{};
         }
 
         ResetSubPool(subPoolID);
@@ -165,7 +167,11 @@ uint8_t* KoPoolIteratable::AllocateBytes() noexcept {
 #endif
         }
 
-        return pMemory;
+        AllocBytesResult result{};
+        result.subPoolID = subPoolID;
+        result.pMemory = pMemory;
+
+        return result;
     }
 
     const SkipNodeHead* pMemoryHead = reinterpret_cast<SkipNodeHead*>(pMemory);
@@ -184,10 +190,16 @@ uint8_t* KoPoolIteratable::AllocateBytes() noexcept {
 
     subPool.pNextFreeSkipNodeHead = pHead;
 
-    return pMemory;
+    AllocBytesResult result{};
+    result.subPoolID = subPoolID;
+    result.pMemory = pMemory;
+
+    return result;
 }
 
-void KoPoolIteratable::DeallocateBytesImpl(uint8_t* pMemory, const USize subPoolID) noexcept {
+void KoPoolIteratable::DeallocateBytesImpl(void* pMemory_, const USize subPoolID) noexcept {
+
+    uint8_t* pMemory = reinterpret_cast<uint8_t*>(pMemory_);
 
     if (!pMemory) {
         return;
@@ -202,7 +214,11 @@ void KoPoolIteratable::DeallocateBytesImpl(uint8_t* pMemory, const USize subPool
 
     _vacantSubPools |= ((USize)1 << subPoolID);
 
+    __KO_POOL_ITERATABLE_ASSERT_TEST__(!IsSkipListNode(pMemory, subPoolID));
+
     defer{
+
+        SetIsSkipListNode(pMemory, subPoolID, true);
 
         if (IsSubPoolEmpty(subPoolID)) {
 
@@ -228,9 +244,6 @@ void KoPoolIteratable::DeallocateBytesImpl(uint8_t* pMemory, const USize subPool
             }
         }
     };
-
-    __KO_POOL_ITERATABLE_ASSERT_TEST__(!IsSkipListNode(pMemory, subPoolID));
-    defer{ SetIsSkipListNode(pMemory, subPoolID, true); };
 
     const bool isLeftSkipListNode = IsLeftSkipListNodeSafe(pMemory, subPoolID);
     const bool isRightSkipListNode = IsRightSkipListNodeSafe(pMemory, subPoolID);
@@ -327,6 +340,32 @@ void KoPoolIteratable::DeallocateBytesImpl(uint8_t* pMemory, const USize subPool
     HeadNodeSetPrevFreeSkipNodeTail(pTail->pNextFreeSkipNodeHead, pTail, subPoolID);
 }
 
+void KoPoolIteratable::DeallocateBytesByPtr(void* pMemory_) noexcept {
+
+    uint8_t* pMemory = reinterpret_cast<uint8_t*>(pMemory_);
+
+    if (!pMemory) {
+        return;
+    }
+
+    const USize subPoolID = FindSubPoolIDByPtrImpl(pMemory);
+    return DeallocateBytesImpl(pMemory, subPoolID);
+}
+
+void KoPoolIteratable::DeallocateBytesByID(const USize id) noexcept {
+
+    const PoolID poolID = IDToPtrImpl(id);
+    __KO_POOL_ITERATABLE_ASSERT_TEST__(poolID.subPoolID != SUB_POOL_ID_NONE);
+    __KO_POOL_ITERATABLE_ASSERT_TEST__(IsPtrInsideSubPool(poolID.pMemory, poolID.subPoolID));
+
+    DeallocateBytesByPtrAndSubPoolID(poolID.pMemory, poolID.subPoolID);
+}
+
+void KoPoolIteratable::DeallocateBytesByPtrAndSubPoolID(void* pMemory, const USize subPoolID) noexcept {
+
+    DeallocateBytesImpl(pMemory, subPoolID);
+}
+
 void KoPoolIteratable::DeallocateBytesAll() noexcept {
 
     __KO_POOL_ITERATABLE_ASSERT_TEST__(_pSubPools);
@@ -344,14 +383,30 @@ void KoPoolIteratable::DeallocateBytesAll() noexcept {
     _pSubPools->sortedPointers = { SortedPointer{} };
 }
 
-void KoPoolIteratable::DeallocateBytes(uint8_t* pMemory) noexcept {
+uint8_t* KoPoolIteratable::IDToPtr(const USize id) const noexcept {
 
-    if (!pMemory) {
-        return;
-    }
+    const PoolID poolID = IDToPtrImpl(id);
+    return poolID.pMemory;
+}
 
-    const USize subPoolID = FindSubPoolIDByPtr(pMemory);
-    return DeallocateBytesImpl(pMemory, subPoolID);
+KoPoolIteratable::USize KoPoolIteratable::IDToSubPoolID(const USize id) const noexcept {
+
+    return IDToSubPoolIDImpl(id);
+}
+
+KoPoolIteratable::USize KoPoolIteratable::FindSubPoolIDByPtr(const void* pMemory) const noexcept {
+
+    const USize subPoolID = FindSubPoolIDByPtrImpl(pMemory);
+    __KO_POOL_ITERATABLE_ASSERT_DEV__(subPoolID != SUB_POOL_ID_NONE);
+    __KO_POOL_ITERATABLE_ASSERT_DEV__(IsPtrInsideSubPool(pMemory, subPoolID));
+
+    return subPoolID;
+}
+
+KoPoolIteratable::USize KoPoolIteratable::PtrToID(const void* pMemory, const USize subPoolID) const noexcept {
+
+    const PoolID poolID = PtrToIDImpl(pMemory, subPoolID);
+    return poolID.id;
 }
 
 KoPoolIteratable::USize KoPoolIteratable::GetSubPoolSize(const USize subPoolID) noexcept {
@@ -474,7 +529,7 @@ KoPoolIteratable::USize KoPoolIteratable::Log2(const USize num) noexcept {
         return 0;
     }
 
-    return DIGITS - Count0BitsLeft(num);
+    return (DIGITS - 1) - Count0BitsLeft(num);
 }
 
 KoPoolIteratable::USize KoPoolIteratable::RoundUpToPowerOf2(const USize num) noexcept {
@@ -490,13 +545,13 @@ KoPoolIteratable::USize KoPoolIteratable::RoundUpToPowerOf2(const USize num) noe
     return (USize)1 << (DIGITS - Count0BitsLeft(num));
 }
 
-KoPoolIteratable::USize KoPoolIteratable::FindSubPoolIDByPtr(const uint8_t* pMemory) const noexcept {
+KoPoolIteratable::USize KoPoolIteratable::FindSubPoolIDByPtrImpl(const void* pMemory) const noexcept {
 
     const USize sortedPointerID = FindSortedPointerIDByPtr(pMemory);
     return _pSubPools->sortedPointers[sortedPointerID].subPoolID;
 }
 
-KoPoolIteratable::USize KoPoolIteratable::FindSortedPointerIDByPtr(const uint8_t* pMemory) const noexcept {
+KoPoolIteratable::USize KoPoolIteratable::FindSortedPointerIDByPtr(const void* pMemory) const noexcept {
 
     const USize sortedPointersSizePow2 = RoundUpToPowerOf2(_pSubPools->sortedPointersSize);
     __KO_POOL_ITERATABLE_ASSERT_TEST__(sortedPointersSizePow2 > 0 && sortedPointersSizePow2 <= DIGITS);
@@ -540,21 +595,55 @@ KoPoolIteratable::USize KoPoolIteratable::FindSortedPointerIDByPtr(const uint8_t
     //return SUB_POOL_ID_NONE;
 }
 
-KoPoolIteratable::USize KoPoolIteratable::GetIDByPtrAndSubPoolID(
-    const uint8_t* pMemory, const USize subPoolID
-) const noexcept {
+KoPoolIteratable::PoolID KoPoolIteratable::IDToPtrImpl(const USize id) const noexcept {
+
+    const USize subPoolID = IDToSubPoolIDImpl(id);
+    const USize baseID = subPoolID == 0
+        ? 0
+        // in 2^0 we store 2 elements
+        : ((USize)1 << subPoolID);
+
+    __KO_POOL_ITERATABLE_ASSERT_TEST__(_pSubPools);
+    __KO_POOL_ITERATABLE_ASSERT_TEST__(_pSubPools->pointers[subPoolID]);
+    __KO_POOL_ITERATABLE_ASSERT_TEST__(id >= baseID);
+    uint8_t* pMemory = _pSubPools->pointers[subPoolID] + (id - baseID) * _opt.elementSizeInBytes;
+
+    PoolID result{};
+    result.subPoolID = subPoolID;
+    result.id = id;
+    result.pMemory = pMemory;
+
+    return result;
+}
+
+KoPoolIteratable::USize KoPoolIteratable::IDToSubPoolIDImpl(const USize id) const noexcept {
+
+    const USize subPoolID = Log2(id);
+    __KO_POOL_ITERATABLE_ASSERT_TEST__(subPoolID < SUBPOOLS_CNT);
+
+    return subPoolID;
+}
+
+KoPoolIteratable::PoolID KoPoolIteratable::PtrToIDImpl(const void* pMemory, const USize subPoolID) const noexcept {
+
+    __KO_POOL_ITERATABLE_ASSERT_TEST__(IsPtrInsideSubPool(pMemory, subPoolID));
 
     const USize baseID = subPoolID == 0
         ? 0
         // in 2^0 we store 2 elements
         : ((USize)1 << subPoolID);
 
-    return baseID + GetIDInSubPoolByPtrAndSubPoolID(pMemory, subPoolID);
+    const USize id = baseID + PtrToIDInSubPool(pMemory, subPoolID);
+
+    PoolID result{};
+    result.subPoolID = subPoolID;
+    result.id = id;
+    result.pMemory = nullptr;
+
+    return result;
 }
 
-KoPoolIteratable::USize KoPoolIteratable::GetIDInSubPoolByPtrAndSubPoolID(
-    const uint8_t* pMemory, const USize subPoolID
-) const noexcept {
+KoPoolIteratable::USize KoPoolIteratable::PtrToIDInSubPool(const void* pMemory, const USize subPoolID) const noexcept {
 
     __KO_POOL_ITERATABLE_ASSERT_TEST__(IsPtrInsideSubPool(pMemory, subPoolID));
 
@@ -566,21 +655,7 @@ KoPoolIteratable::USize KoPoolIteratable::GetIDInSubPoolByPtrAndSubPoolID(
     return offsetInBytes / _opt.elementSizeInBytes;
 }
 
-uint8_t* KoPoolIteratable::IDToPtr(const USize id) const noexcept {
-
-    const USize subPoolID = Log2(id);
-    __KO_POOL_ITERATABLE_ASSERT_TEST__(subPoolID != SUB_POOL_ID_NONE);
-
-    const USize baseID = subPoolID == 0
-        ? 0
-        // in 2^0 we store 2 elements
-        : ((USize)1 << subPoolID);
-
-    __KO_POOL_ITERATABLE_ASSERT_TEST__(_pSubPools);
-    return _pSubPools->pointers[subPoolID] + (id - baseID);
-}
-
-bool KoPoolIteratable::IsPtrInsideSubPool(const uint8_t* pMemory, const size_t subPoolID) const noexcept {
+bool KoPoolIteratable::IsPtrInsideSubPool(const void* pMemory, const size_t subPoolID) const noexcept {
 
     __KO_POOL_ITERATABLE_ASSERT_TEST__(_pSubPools);
 
@@ -639,8 +714,8 @@ KoPoolIteratable::SkipNodeTail* KoPoolIteratable::HeadToTail(SkipNodeBase* pHead
 
     __KO_POOL_ITERATABLE_ASSERT_TEST__(pHeadNode);
     __KO_POOL_ITERATABLE_ASSERT_TEST__(pHeadNode->pPrevFreeSkipNodeTail);
-    __KO_POOL_ITERATABLE_ASSERT_TEST__(!IsLeftSkipListNodeSafe(pHeadNodeBytes, FindSubPoolIDByPtr(pHeadNodeBytes)));
-    __KO_POOL_ITERATABLE_ASSERT_TEST__(IsRightSkipListNodeSafe(pHeadNodeBytes, FindSubPoolIDByPtr(pHeadNodeBytes)));
+    __KO_POOL_ITERATABLE_ASSERT_TEST__(!IsLeftSkipListNodeSafe(pHeadNodeBytes, FindSubPoolIDByPtrImpl(pHeadNodeBytes)));
+    __KO_POOL_ITERATABLE_ASSERT_TEST__(IsRightSkipListNodeSafe(pHeadNodeBytes, FindSubPoolIDByPtrImpl(pHeadNodeBytes)));
 
     return reinterpret_cast<SkipNodeTail*>(
         pHeadNodeBytes + reinterpret_cast<SkipNodeHead*>(pHeadNode)->numBytesToTail
@@ -653,8 +728,8 @@ KoPoolIteratable::SkipNodeHead* KoPoolIteratable::TailToHead(SkipNodeBase* pTail
 
     __KO_POOL_ITERATABLE_ASSERT_TEST__(pTailNode);
     __KO_POOL_ITERATABLE_ASSERT_TEST__(pTailNode->pPrevFreeSkipNodeTail);
-    __KO_POOL_ITERATABLE_ASSERT_TEST__(IsLeftSkipListNodeSafe(pTailNodeBytes, FindSubPoolIDByPtr(pTailNodeBytes)));
-    __KO_POOL_ITERATABLE_ASSERT_TEST__(!IsRightSkipListNodeSafe(pTailNodeBytes, FindSubPoolIDByPtr(pTailNodeBytes)));
+    __KO_POOL_ITERATABLE_ASSERT_TEST__(IsLeftSkipListNodeSafe(pTailNodeBytes, FindSubPoolIDByPtrImpl(pTailNodeBytes)));
+    __KO_POOL_ITERATABLE_ASSERT_TEST__(!IsRightSkipListNodeSafe(pTailNodeBytes, FindSubPoolIDByPtrImpl(pTailNodeBytes)));
 
     return reinterpret_cast<SkipNodeHead*>(pTailNode->pPrevFreeSkipNodeTail->pNextFreeSkipNodeHead);
 }
@@ -668,7 +743,7 @@ void KoPoolIteratable::HeadNodeSetPrevFreeSkipNodeTail(
     }
 
     uint8_t* pHeadNodeBytes = reinterpret_cast<uint8_t*>(pHeadNode);
-    __KO_POOL_ITERATABLE_ASSERT_TEST__(FindSubPoolIDByPtr(pHeadNodeBytes) == subPoolID);
+    __KO_POOL_ITERATABLE_ASSERT_TEST__(FindSubPoolIDByPtrImpl(pHeadNodeBytes) == subPoolID);
     __KO_POOL_ITERATABLE_ASSERT_TEST__(!IsLeftSkipListNodeSafe(pHeadNodeBytes, subPoolID));
 
     const uint8_t* pTailNodeBytes = reinterpret_cast<uint8_t*>(pTailToSet);
@@ -678,7 +753,7 @@ void KoPoolIteratable::HeadNodeSetPrevFreeSkipNodeTail(
 
     if (pTailToSet != &_pSubPools->pools[subPoolID]) {
 
-        __KO_POOL_ITERATABLE_ASSERT_TEST__(FindSubPoolIDByPtr(pTailNodeBytes) == subPoolID);
+        __KO_POOL_ITERATABLE_ASSERT_TEST__(FindSubPoolIDByPtrImpl(pTailNodeBytes) == subPoolID);
         __KO_POOL_ITERATABLE_ASSERT_TEST__(!IsRightSkipListNodeSafe(pTailNodeBytes, subPoolID));
     }
 #endif
@@ -692,9 +767,9 @@ void KoPoolIteratable::HeadNodeSetPrevFreeSkipNodeTail(
     }
 }
 
-bool KoPoolIteratable::IsSkipListNode(const uint8_t* pMemory, const USize subPoolID) const noexcept {
+bool KoPoolIteratable::IsSkipListNode(const void* pMemory, const USize subPoolID) const noexcept {
 
-    return IsSkipListNodeByIDInSubPool(GetIDInSubPoolByPtrAndSubPoolID(pMemory, subPoolID), subPoolID);
+    return IsSkipListNodeByIDInSubPool(PtrToIDInSubPool(pMemory, subPoolID), subPoolID);
 }
 
 bool KoPoolIteratable::IsSkipListNodeByIDInSubPool(const USize idInSubPool, const USize subPoolID) const noexcept {
@@ -709,12 +784,12 @@ bool KoPoolIteratable::IsSkipListNodeByIDInSubPool(const USize idInSubPool, cons
     return ((reinterpret_cast<USize*>(subPool.pPrevFreeSkipNodeTail)[idInSubPool / DIGITS] >> bitID) & 0b1) == 1;
 }
 
-void KoPoolIteratable::SetIsSkipListNode(const uint8_t* pMemory, const USize subPoolID, const bool isSkipListNode) noexcept {
+void KoPoolIteratable::SetIsSkipListNode(const void* pMemory, const USize subPoolID, const bool isSkipListNode) noexcept {
 
     __KO_POOL_ITERATABLE_ASSERT_TEST__(_pSubPools);
     const SubPools::Pool& subPool = _pSubPools->pools[subPoolID];
 
-    const USize id = GetIDInSubPoolByPtrAndSubPoolID(pMemory, subPoolID);
+    const USize id = PtrToIDInSubPool(pMemory, subPoolID);
     const USize bitID = (id & (DIGITS - 1));
 
     if (isSkipListNode) {
@@ -727,7 +802,9 @@ void KoPoolIteratable::SetIsSkipListNode(const uint8_t* pMemory, const USize sub
     }
 }
 
-bool KoPoolIteratable::IsRightSkipListNodeSafe(const uint8_t* pMemory, const USize subPoolID) const noexcept {
+bool KoPoolIteratable::IsRightSkipListNodeSafe(const void* pMemory_, const USize subPoolID) const noexcept {
+
+    const uint8_t* pMemory = reinterpret_cast<const uint8_t*>(pMemory_);
 
     __KO_POOL_ITERATABLE_ASSERT_TEST__(_pSubPools);
     __KO_POOL_ITERATABLE_ASSERT_TEST__(
@@ -741,18 +818,12 @@ bool KoPoolIteratable::IsRightSkipListNodeSafe(const uint8_t* pMemory, const USi
     return !isEnd && IsSkipListNode(pMemory + _opt.elementSizeInBytes, subPoolID);
 }
 
-bool KoPoolIteratable::IsRightSkipListNodeSafe(const SkipNodeBase* pMemory, const USize subPoolID) const noexcept {
-    return IsRightSkipListNodeSafe(reinterpret_cast<const uint8_t*>(pMemory), subPoolID);
-}
+bool KoPoolIteratable::IsLeftSkipListNodeSafe(const void* pMemory_, const USize subPoolID) const noexcept {
 
-bool KoPoolIteratable::IsLeftSkipListNodeSafe(const uint8_t* pMemory, const USize subPoolID) const noexcept {
+    const uint8_t* pMemory = reinterpret_cast<const uint8_t*>(pMemory_);
 
     __KO_POOL_ITERATABLE_ASSERT_TEST__(_pSubPools);
 
     const bool isBegin = pMemory == _pSubPools->pointers[subPoolID];
     return !isBegin && IsSkipListNode(pMemory - _opt.elementSizeInBytes, subPoolID);
-}
-
-bool KoPoolIteratable::IsLeftSkipListNodeSafe(const SkipNodeBase* pMemory, const USize subPoolID) const noexcept {
-    return IsLeftSkipListNodeSafe(reinterpret_cast<const uint8_t*>(pMemory), subPoolID);
 }

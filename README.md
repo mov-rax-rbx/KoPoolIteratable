@@ -14,18 +14,18 @@ As `UnorderedSet` I use [unordered_dense](https://github.com/martinus/unordered_
 	We see that allocation close to `std::vector` push
 
 #### Deallocations
-	[KoPool] Deallocate:    0.000138ms
+	[KoPool] Deallocate:    0.000052ms
 	[STDVector] Pop:        0.000013ms
 	[UnorderedSet] Erase:   0.000181ms
 
-	We see deallocation close to `unordered_dense` erase. The deallocation version binary searches
+	We see deallocation closer to `std::vector` pop. The deallocation version binary searches
 	pointer in the exponential allocated blocks range - if we use for deallocation index, not pointer, it
-	will be closer to `std::vector` pop_back
+	will be little bit faster, but in this case issue with jumps in memory - need to maintain a skip list
 
 #### Iterations
-	[KoPool] Iterate:       4.012267ms
+	[KoPool] Iterate:       4.168833ms
 	[STDVector] Iterate:    6.973767ms
-	[UnorderedSet] Iterate: 3.654533ms
+	[UnorderedSet] Iterate: 4.038233ms
 
 	With enabled vectorization:
 	[KoPool] Iterate:       3.750200ms

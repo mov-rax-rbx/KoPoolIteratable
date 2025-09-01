@@ -9,11 +9,11 @@
 
 #define DevAssert(expression, message) \
 do { \
-	if (!(expression)) { \
-		std::cerr << message; \
-		__debugbreak(); \
-		std::terminate(); \
-	} \
+    if (!(expression)) { \
+        std::cerr << message; \
+        __debugbreak(); \
+        std::terminate(); \
+    } \
 } while (0)
 
 class TestCtx {
@@ -124,13 +124,25 @@ private:
 
         Bench bench{};
 
+        size_t id = 0;
         for (size_t i = 0; i < SIZE; ++i) {
 
             Data* pData = nullptr;
 
+            KoPoolIteratable::AllocBytesResult alloc{};
             bench.TimeScope(Bench::KoPoolAllocate, [&]() {
-                pData = _pPool->Allocate<Data>();
+
+                alloc = _pPool->AllocateBytes();
+                pData = reinterpret_cast<Data*>(alloc.pMemory);
             });
+
+            DevAssert(id == _pPool->PtrToID(alloc.pMemory, alloc.subPoolID), "");
+            DevAssert(_pPool->IDToPtr(id) == alloc.pMemory, "");
+            DevAssert(_pPool->IDToSubPoolID(id) == alloc.subPoolID, "");
+            id += 1;
+
+            // Don't bench constructor call
+            new (pData) Data{};
 
             bench.TimeScope(Bench::STDVectorPush, [&]() {
                 _datas.push_back(pData);
@@ -180,11 +192,19 @@ private:
         const size_t numToRemove = _distribution(_rng);
         for (size_t i = 0; i < numToRemove; ++i) {
 
-            //KoPoolIteratable::USize subPoolID = _pPool->FindSubPoolIDByPtr((uint8_t*)_datas.back());
+            // Don't bench destructor call
+            _datas.back()->~Data();
+
+            const KoPoolIteratable::USize subPoolID = _pPool->FindSubPoolIDByPtr(_datas.back());
+            const KoPoolIteratable::USize id = _pPool->PtrToID(_datas.back(), subPoolID);
+            DevAssert(reinterpret_cast<uint8_t*>(_datas.back()) == _pPool->IDToPtr(id), "");
+            DevAssert(subPoolID == _pPool->IDToSubPoolID(id), "");
 
             bench.TimeScope(Bench::KoPoolDeallocate, [&]() {
-                //_pPool->DeallocateBytesImpl((uint8_t*)_datas.back(), subPoolID);
-                _pPool->Deallocate(_datas.back());
+
+                //_pPool->DeallocateBytesByID(id);
+                //_pPool->DeallocateBytesBySubPoolID(_datas.back(), subPoolID);
+                _pPool->DeallocateBytesByPtr(_datas.back());
             });
 
             bench.TimeScope(Bench::UnorderedSetErase, [&]() {
@@ -194,8 +214,6 @@ private:
             bench.TimeScope(Bench::STDVectorPop, [&]() {
                 _datas.pop_back();
             });
-
-            i += 1;
         }
 
         bench.TimeScope(Bench::KoPoolIterate, [&]() {
@@ -234,8 +252,13 @@ private:
             Data* pData = nullptr;
 
             bench.TimeScope(Bench::KoPoolAllocate, [&]() {
-                pData = _pPool->Allocate<Data>();
+
+                KoPoolIteratable::AllocBytesResult alloc = _pPool->AllocateBytes();
+                pData = reinterpret_cast<Data*>(alloc.pMemory);
             });
+
+            // Don't bench constructor call
+            new (pData) Data{};
 
             bench.TimeScope(Bench::STDVectorPush, [&]() {
                 _datas.push_back(pData);

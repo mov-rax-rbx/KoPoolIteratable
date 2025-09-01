@@ -86,6 +86,8 @@ public:
 
     using USize = size_t;
 
+    static constexpr USize SUBPOOLS_CNT = std::numeric_limits<USize>::digits;
+
     struct Opt {
 
         USize elementSizeInBytes = sizeof(USize);
@@ -107,7 +109,12 @@ public:
         __KO_POOL_ITERATABLE_ASSERT_DEV__(sizeof(T) == _opt.elementSizeInBytes);
         __KO_POOL_ITERATABLE_ASSERT_DEV__(alignof(T) == _opt.elementAlignment);
 
-        T* pData = reinterpret_cast<T*>(AllocateBytes());
+        const AllocBytesResult alloc = AllocateBytes();
+        if (!alloc.pMemory) {
+            return nullptr;
+        }
+
+        T* pData = reinterpret_cast<T*>(alloc.pMemory);
         new (pData) T{ std::forward<Args>(args)... };
 
         return pData;
@@ -119,13 +126,16 @@ public:
         __KO_POOL_ITERATABLE_ASSERT_DEV__(sizeof(T) == _opt.elementSizeInBytes);
         __KO_POOL_ITERATABLE_ASSERT_DEV__(alignof(T) == _opt.elementAlignment);
 
-        T* pData = reinterpret_cast<T*>(AllocateBytes());
+        const AllocBytesResult alloc = AllocateBytes();
+        if (!alloc.pMemory) {
+            return nullptr;
+        }
+
+        T* pData = reinterpret_cast<T*>(alloc.pMemory);
         new (pData) T{ std::forward<T>(data) };
 
         return pData;
     }
-
-    uint8_t* AllocateBytes() noexcept;
 
     template <typename T>
     void Deallocate(T* pMemory) noexcept {
@@ -136,11 +146,48 @@ public:
 
         pMemory->~T();
 
-        DeallocateBytes(reinterpret_cast<uint8_t*>(pMemory));
+        DeallocateBytesByPtr(pMemory);
     }
 
-    void DeallocateBytes(uint8_t* pMemory) noexcept;
+    template <typename T>
+    void DeallocateByID(const USize id) noexcept {
+
+        const PoolID poolID = IDToPtrImpl(id);
+        DeallocateBySubPoolID(reinterpret_cast<T*>(poolID.pMemory), poolID.subPoolID);
+    }
+
+    template <typename T>
+    void DeallocateBySubPoolID(T* pMemory, const USize subPoolID) noexcept {
+
+        __KO_POOL_ITERATABLE_ASSERT_DEV__(subPoolID != SUB_POOL_ID_NONE);
+        __KO_POOL_ITERATABLE_ASSERT_DEV__(IsPtrInsideSubPool(pMemory, subPoolID));
+
+        if (!pMemory) {
+            return;
+        }
+
+        pMemory->~T();
+
+        DeallocateBytesBySubPoolID(pMemory, subPoolID);
+    }
+
+    struct AllocBytesResult {
+        USize subPoolID = SUB_POOL_ID_NONE;
+        uint8_t* pMemory = nullptr;
+    };
+    AllocBytesResult AllocateBytes() noexcept;
+
+    void DeallocateBytesByPtr(void* pMemory) noexcept;
+    void DeallocateBytesByID(const USize id) noexcept;
+    void DeallocateBytesByPtrAndSubPoolID(void* pMemory, const USize subPoolID) noexcept;
+
     void DeallocateBytesAll() noexcept;
+
+    uint8_t* IDToPtr(const USize id) const noexcept;
+    USize IDToSubPoolID(const USize id) const noexcept;
+
+    USize FindSubPoolIDByPtr(const void* pMemory) const noexcept;
+    USize PtrToID(const void* pMemory, const USize subPoolID) const noexcept;
 
     template <typename T, std::enable_if_t<std::is_abstract<T>::value>* = nullptr>
     KoPoolIterator<T> GetIterator() const noexcept {
@@ -188,24 +235,26 @@ private:
     static __KO_POOL_FORCE_INLINE__ USize Log2(const USize num) noexcept;
     static __KO_POOL_FORCE_INLINE__ USize RoundUpToPowerOf2(const USize num) noexcept;
 
-    struct FindSubPoolIDByPtrResult {
+    struct PoolID {
         USize subPoolID = SUB_POOL_ID_NONE;
-        USize sortedPointersID = SUB_POOL_ID_NONE;
+        USize id = 0;
+        uint8_t* pMemory = nullptr;
     };
 
-    USize FindSubPoolIDByPtr(const uint8_t* pMemory) const noexcept;
-    USize FindSortedPointerIDByPtr(const uint8_t* pMemory) const noexcept;
-    USize GetIDByPtrAndSubPoolID(const uint8_t* pMemory, const USize subPoolID) const noexcept;
-    USize GetIDInSubPoolByPtrAndSubPoolID(const uint8_t* pMemory, const USize subPoolID) const noexcept;
+    PoolID IDToPtrImpl(const USize id) const noexcept;
+    USize IDToSubPoolIDImpl(const USize id) const noexcept;
+    PoolID PtrToIDImpl(const void* pMemory, const USize subPoolID) const noexcept;
+    USize PtrToIDInSubPool(const void* pMemory, const USize subPoolID) const noexcept;
 
-    uint8_t* IDToPtr(const USize id) const noexcept;
+    USize FindSubPoolIDByPtrImpl(const void* pMemory) const noexcept;
+    USize FindSortedPointerIDByPtr(const void* pMemory) const noexcept;
 
-    bool IsPtrInsideSubPool(const uint8_t* pMemory, const USize subPoolID) const noexcept;
+    bool IsPtrInsideSubPool(const void* pMemory, const USize subPoolID) const noexcept;
     bool IsSubPoolEmpty(const USize subPoolID) const noexcept;
     void ResetSubPool(const USize subPoolID) noexcept;
 
     template <USize NUMBER>
-    __KO_POOL_FORCE_INLINE__ USize BinarySearchSubPoolIDByPointerPow2Impl(const uint8_t* pMemory, const USize offset = 0) const noexcept {
+    __KO_POOL_FORCE_INLINE__ USize BinarySearchSubPoolIDByPointerPow2Impl(const void* pMemory, const USize offset = 0) const noexcept {
 
         const USize sortedPointerID =
             BinarySearchSortedPointerIDByPointerPow2Impl<NUMBER>(pMemory, offset);
@@ -215,7 +264,7 @@ private:
     }
 
     template <USize NUMBER>
-    __KO_POOL_FORCE_INLINE__ USize BinarySearchSortedPointerIDByPointerPow2Impl(const uint8_t* pMemory, const USize offset = 0) const noexcept {
+    __KO_POOL_FORCE_INLINE__ USize BinarySearchSortedPointerIDByPointerPow2Impl(const void* pMemory, const USize offset = 0) const noexcept {
 
         __KO_POOL_ITERATABLE_ASSERT_TEST__(_pSubPools);
         const KoPoolIteratable::SortedPointer* pSortedPointers = _pSubPools->sortedPointers.data() + offset;
@@ -249,17 +298,14 @@ private:
     SkipNodeHead* TailToHead(SkipNodeBase* pTailNode) const noexcept;
     void HeadNodeSetPrevFreeSkipNodeTail(SkipNodeBase* pHeadNode, SkipNodeTail* pTailToSet, const USize subPoolID) const noexcept;
 
-    bool IsSkipListNode(const uint8_t* pMemory, const USize subPoolID) const noexcept;
+    bool IsSkipListNode(const void* pMemory, const USize subPoolID) const noexcept;
     bool IsSkipListNodeByIDInSubPool(const USize idInSubPool, const USize subPoolID) const noexcept;
-    void SetIsSkipListNode(const uint8_t* pMemory, const USize subPoolID, const bool isSkipListNode) noexcept;
+    void SetIsSkipListNode(const void* pMemory, const USize subPoolID, const bool isSkipListNode) noexcept;
 
-    bool IsRightSkipListNodeSafe(const uint8_t* pMemory, const USize subPoolID) const noexcept;
-    bool IsRightSkipListNodeSafe(const SkipNodeBase* pMemory, const USize subPoolID) const noexcept;
+    bool IsRightSkipListNodeSafe(const void* pMemory, const USize subPoolID) const noexcept;
+    bool IsLeftSkipListNodeSafe(const void* pMemory, const USize subPoolID) const noexcept;
 
-    bool IsLeftSkipListNodeSafe(const uint8_t* pMemory, const USize subPoolID) const noexcept;
-    bool IsLeftSkipListNodeSafe(const SkipNodeBase* pMemory, const USize subPoolID) const noexcept;
-
-    void DeallocateBytesImpl(uint8_t* pMemory, const USize subPoolID) noexcept;
+    void DeallocateBytesImpl(void* pMemory, const USize subPoolID) noexcept;
 
 private:
 
@@ -420,7 +466,7 @@ private:
             KoPoolIteratorCore iterator = *this;
 
             __KO_POOL_ITERATABLE_ASSERT_TEST__(_subPoolID < KoPoolIteratable::DIGITS);
-            __KO_POOL_ITERATABLE_ASSERT_TEST__(KoPoolIteratable::IsPowerOf2(KoPoolIteratable::DIGITS));
+            __KO_POOL_ITERATABLE_ASSERT_TEST__(IsPowerOf2(KoPoolIteratable::DIGITS));
 
             const USize mask = ~(((USize)1 << _subPoolID) - 1);
             iterator._subPoolsWhichHaveAtLeastOneElement =
@@ -438,7 +484,7 @@ private:
             KoPoolIteratorCore iterator = *this;
 
             __KO_POOL_ITERATABLE_ASSERT_TEST__(_subPoolID < KoPoolIteratable::DIGITS);
-            __KO_POOL_ITERATABLE_ASSERT_TEST__(KoPoolIteratable::IsPowerOf2(KoPoolIteratable::DIGITS));
+            __KO_POOL_ITERATABLE_ASSERT_TEST__(IsPowerOf2(KoPoolIteratable::DIGITS));
 
             const USize mask = ~(((USize)1 << _subPoolID) - 1);
             iterator._subPoolsWhichHaveAtLeastOneElement =
@@ -458,7 +504,7 @@ private:
 
             __KO_POOL_ITERATABLE_ASSERT_DEV__(pool.IsSkipListNode(pDeallocatedMemory, _subPoolID));
 
-            const USize idInSubPool = pool.GetIDInSubPoolByPtrAndSubPoolID(pDeallocatedMemory, _subPoolID);
+            const USize idInSubPool = pool.PtrToIDInSubPool(pDeallocatedMemory, _subPoolID);
             if (idInSubPool == iterator._idInSubPool) {
 
                 const bool isLeftSkipListNode = pool.IsLeftSkipListNodeSafe(pDeallocatedMemory, _subPoolID);
@@ -538,8 +584,8 @@ private:
     template <typename T>
     friend class KoPoolIterator;
 
-    static constexpr USize DIGITS = std::numeric_limits<USize>::digits;
-    static constexpr USize SUB_POOL_ID_NONE = DIGITS;
+    static constexpr USize DIGITS = SUBPOOLS_CNT;
+    static constexpr USize SUB_POOL_ID_NONE = SUBPOOLS_CNT;
 
     struct SubPools;
 
