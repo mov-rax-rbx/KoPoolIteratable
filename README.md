@@ -27,6 +27,10 @@ As `UnorderedSet` I use [unordered_dense](https://github.com/martinus/unordered_
 	[STDVector] Iterate:    6.973767ms
 	[UnorderedSet] Iterate: 3.654533ms
 
+	With enabled vectorization:
+	[KoPool] Iterate:       3.750200ms
+	[UnorderedSet] Iterate: 3.688067ms
+
 	We see iterations close to `unordered_dense`. In this test in `std::vector`, we store pointers
 	to allocated data in `KoPoolIteratable` and before iterations, we shuffle `std::vector` to simulate
 	situation when we allocate some data, then them push to `std::vector`, and remove this element using
