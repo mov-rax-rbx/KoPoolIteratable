@@ -225,7 +225,7 @@ private:
             const bool isPtrInsideSubPool =
                 pMemory >= pSortedPointers[NUMBER].pMemory &&
                 pMemory < pSortedPointers[NUMBER].pMemory +
-                GetSubPoolSize(pSortedPointers[NUMBER].subPoolID) * _opt.elementSizeInBytes;
+                    GetSubPoolSize(pSortedPointers[NUMBER].subPoolID) * _opt.elementSizeInBytes;
 
             __KO_POOL_ITERATABLE_ASSERT_TEST__(isPtrInsideSubPool);
 

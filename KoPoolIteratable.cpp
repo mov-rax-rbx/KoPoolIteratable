@@ -427,6 +427,7 @@ uint32_t KoPoolIteratable::Count0BitsLeft(const uint32_t num) noexcept {
 uint64_t KoPoolIteratable::Count0BitsLeft(const uint64_t num) noexcept {
 
 #ifdef _MSC_VER
+
     unsigned long result;
     const uint8_t isNonZero = _BitScanReverse64(&result, num);
     return isNonZero ? 63 - static_cast<uint64_t>(result) : 64;
@@ -559,7 +560,7 @@ KoPoolIteratable::USize KoPoolIteratable::GetIDInSubPoolByPtrAndSubPoolID(
 
     const USize offsetInBytes = static_cast<USize>(
         reinterpret_cast<uintptr_t>(pMemory) - reinterpret_cast<uintptr_t>(_pSubPools->pointers[subPoolID])
-        );
+    );
 
     __KO_POOL_ITERATABLE_ASSERT_TEST__(offsetInBytes % _opt.elementSizeInBytes == 0);
     return offsetInBytes / _opt.elementSizeInBytes;
