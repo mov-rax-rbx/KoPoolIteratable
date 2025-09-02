@@ -39,7 +39,6 @@ As `UnorderedSet` used [unordered_dense](https://github.com/martinus/unordered_d
 	sequentially in `UnorderedSet` and don't shuffle, the `UnorderedSet` stores data in `std::vector`,
 	so it models the ideal case when memory is sequential, the best case for cache, and no jumps
 
-
 #### Implementation
 
 Used a strategy of exponential blocks - for the x64 system is 64 blocks, a sequence of blocks where block entry index is a power of two (sum($2^0$ + ... + $2^{63}$ ) == $2^{64}$ - 1). Inside the first block, we store 2 elements $2^0$ + 1. To search a vacant block used the msb/lsb intrinsic. Also, for each memory block, a bit set is stored which indicates is an element or a skip node list.
