@@ -1,10 +1,10 @@
 ## KoPoolIteratable
 ___
-A fast data structure that reduces allocations/deallocations, provides stable pointers, and enables fast iterations. Implementation of a pool allocator, designed to allow fast iteration and maintain more sequential allocation to reduce cache misses and improve memory layouts, while keeping pointers stable. To allow fast iterations, it jumps throught empty ranges and maintain this skip node list in the memory pool itself. The sizeof of the element must be >= 16 bytes because I store `SkipNodeHead` or `SkipNodeTail` per skip list node. Also, I maintain a bit set for each block of elements. For more see **Implementation** section.
+A fast data structure that reduces allocations/deallocations, provides stable pointers, and enables fast iterations. Implementation of a pool allocator, designed to allow fast iteration and maintain more sequential allocation to reduce cache misses and improve memory layouts, while keeping pointers stable. To allow for fast iterations, it jumps through empty ranges and maintains this skip node list in the memory pool itself. The sizeof of the element must be >= 16 bytes because `SkipNodeHead` and `SkipNodeTail` are stored per skip list node. Also, a bit set is maintained for each elements. For more see **Implementation** section.
 ___
 ## Benchmark
 
-As `UnorderedSet` I use [unordered_dense](https://github.com/martinus/unordered_dense)
+As `UnorderedSet` used [unordered_dense](https://github.com/martinus/unordered_dense)
 
 #### Allocation
 	[KoPool] Allocate:      0.000031ms
@@ -42,15 +42,14 @@ As `UnorderedSet` I use [unordered_dense](https://github.com/martinus/unordered_
 
 #### Implementation
 
-I use a strategy of exponential blocks - for x64 system I store a sequence of block where block entry index is a power of two (sum($2^0$ + ... + $2^{63}$ ) == $2^{64}$ - 1). Inside the first block, we store 2 elements $2^0$ + 1. To search a vacant block, I use msb/lsb intrinsic. Also, for each memory block, I store a bit set which indicates is an element or a skip node list.
+Used a strategy of exponential blocks - for the x64 system is 64 blocks, a sequence of blocks where block entry index is a power of two (sum($2^0$ + ... + $2^{63}$ ) == $2^{64}$ - 1). Inside the first block, we store 2 elements $2^0$ + 1. To search a vacant block used the msb/lsb intrinsic. Also, for each memory block, a bit set is stored which indicates is an element or a skip node list.
 
 **Exponential Structure**
 ![Exponential Structure](image/ExponentialStructure.png)
 
-I embedded a free list approach to search free ranges, and inside each skip list, I store `SkipNodeHead` and `SkipNodeTail`. The free list pointer, which points on skip nodes, is unordered, but skip nodes is the range between `SkipNodeHead` and `SkipNodeTail` ordered, and as a result, allocation is partialy sequential. To indicate a one-size range or is skip node, I use a bit set.
+Embedded a free list approach to search free ranges, and inside each skip list `SkipNodeHead` or `SkipNodeTail`. The free list pointer, which points to skip nodes, is unordered, but skip nodes is the range between `SkipNodeHead` and `SkipNodeTail`, ordered, and as a result, allocation is partially sequential. To indicate a one-size range or is skip node, a bit set is used.
 
 **Skip List Structure**
 ![Skip List Structure](image/SkipNodeStructure.png)
 
-Also, when I deallocate an element, I track the last empty block, and if I have 2 empty blocks, deallocate the largest block to reduce memory consumption. Also, the element size must be >= 16 bytes because `SkipNodeHead` and `SkipNodeTail` of the skip node are 16 bytes. The pool doesn't uses templates, because I want to use it dynamicaly without any type, probably templates by type can improve performance in some cases.
-
+Also, when an element is deallocated, track the last empty block, and if it has 2 empty blocks, deallocate the largest block to reduce memory consumption. Also, the element size must be >= 16 bytes because `SkipNodeHead` and `SkipNodeTail` of the skip node are 16 bytes. The pool doesn't uses templates, because designed to use dynamically without any type, probably, templates by type can improve performance in some cases.
