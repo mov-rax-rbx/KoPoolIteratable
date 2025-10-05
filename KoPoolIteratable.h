@@ -7,20 +7,13 @@
 //#define __KO_POOL_ITERATABLE_TEST__
 
 #if defined(_MSC_VER)
-#define __KO_POOL_ITERATABLE_ASSUME__(...) do { __assume(__VA_ARGS__); } while(0);
-#define __KO_POOL_UNREACHABLE__() do { __assume(0); } while(0);
+#define __KO_POOL_UNREACHABLE__() do { __assume(0); } while(0)
 #elif defined(__clang__)
-#define __KO_POOL_ITERATABLE_ASSUME__(...) do { __builtin_assume(__VA_ARGS__); } while(0);
-#define __KO_POOL_UNREACHABLE__() do { __builtin_unreachable(); } while(0);
+#define __KO_POOL_UNREACHABLE__() do { __builtin_unreachable(); } while(0)
 #elif defined(__GNUC__)
-#if __GNUC__ >= 13
-#define __KO_POOL_ITERATABLE_ASSUME__(...) do { __attribute__((__assume__(__VA_ARGS__))); } while(0);
+#define __KO_POOL_UNREACHABLE__() do { __builtin_unreachable(); } while(0)
 #else
-#define __KO_POOL_ITERATABLE_ASSUME__(...)
-#endif
-#define __KO_POOL_UNREACHABLE__() do { __builtin_unreachable(); } while(0);
-#else
-#define __KO_POOL_ITERATABLE_ASSUME__(...)
+#define __KO_POOL_UNREACHABLE__()
 #endif
 
 #if defined(_MSC_VER)
@@ -37,7 +30,6 @@ do { \
     if (!(expression)) { \
         std::terminate(); \
     } \
-    __KO_POOL_ITERATABLE_ASSUME__(expression); \
 } while (0)
 
 #define __KO_POOL_ITERATABLE_ASSERT_TEST_UNREACHABLE__() \
@@ -48,15 +40,8 @@ do { \
 
 #else
 
-#define __KO_POOL_ITERATABLE_ASSERT_TEST__(expression) \
-do { \
-    __KO_POOL_ITERATABLE_ASSUME__(expression); \
-} while (0)
-
-#define __KO_POOL_ITERATABLE_ASSERT_TEST_UNREACHABLE__() \
-do { \
-    __KO_POOL_UNREACHABLE__(); \
-} while (0)
+#define __KO_POOL_ITERATABLE_ASSERT_TEST__(expression)
+#define __KO_POOL_ITERATABLE_ASSERT_TEST_UNREACHABLE__() __KO_POOL_UNREACHABLE__()
 
 #endif // __KO_POOL_ITERATABLE_TEST__
 
@@ -66,15 +51,11 @@ do { \
     if (!(expression)) { \
         std::terminate(); \
     } \
-    __KO_POOL_ITERATABLE_ASSUME__(expression); \
 } while (0)
 
 #else
 
-#define __KO_POOL_ITERATABLE_ASSERT_DEV__(expression) \
-do { \
-    __KO_POOL_ITERATABLE_ASSUME__(expression); \
-} while (0)
+#define __KO_POOL_ITERATABLE_ASSERT_DEV__(expression)
 
 #endif // __KO_POOL_ITERATABLE_TEST__
 
