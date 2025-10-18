@@ -8,9 +8,7 @@
 
 #if defined(_MSC_VER)
 #define __KO_POOL_UNREACHABLE__() do { __assume(0); } while(0)
-#elif defined(__clang__)
-#define __KO_POOL_UNREACHABLE__() do { __builtin_unreachable(); } while(0)
-#elif defined(__GNUC__)
+#elif defined(__clang__) || defined(__GNUC__)
 #define __KO_POOL_UNREACHABLE__() do { __builtin_unreachable(); } while(0)
 #else
 #define __KO_POOL_UNREACHABLE__()
@@ -149,7 +147,7 @@ public:
 
         pMemory->~T();
 
-        DeallocateBytesBySubPoolID(pMemory, subPoolID);
+        DeallocateBytesImpl(pMemory, subPoolID);
     }
 
     struct AllocBytesResult {

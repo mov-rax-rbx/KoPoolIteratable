@@ -456,7 +456,7 @@ void KoPoolIteratable::RemoveSortedPointer(const USize subPoolID) noexcept {
 
     while (idxToRemove + 1 < _pSubPools->sortedPointersSize) {
 
-        std::swap(_pSubPools->sortedPointers[idxToRemove], _pSubPools->sortedPointers[idxToRemove + 1]);
+        _pSubPools->sortedPointers[idxToRemove] = _pSubPools->sortedPointers[idxToRemove + 1];
         idxToRemove += 1;
     }
 
