@@ -405,7 +405,7 @@ private:
 
     private:
 
-        std::array<Time, Section::COUNT> _timings;
+        std::array<Time, Section::COUNT> _timings{};
     };
 
 private:
