@@ -3,7 +3,7 @@
 #include <array>
 #include <memory>
 
-#define __KO_POOL_ITERATABLE_DEV__
+//#define __KO_POOL_ITERATABLE_DEV__
 //#define __KO_POOL_ITERATABLE_TEST__
 
 #if defined(_MSC_VER)
@@ -291,9 +291,19 @@ private:
     class KoPoolIteratorCore {
     public:
 
-        KoPoolIteratorCore(const KoPoolIteratable& pool)
-            : _subPoolsWhichHaveAtLeastOneElement(pool._subPoolsWhichHaveAtLeastOneElement)
-        {}
+        KoPoolIteratorCore(const KoPoolIteratable& pool) {
+
+            const USize subPoolsWhichHaveAtLeastOneElement = pool._subPoolsWhichHaveAtLeastOneElement;
+            if (subPoolsWhichHaveAtLeastOneElement == 0) {
+
+                _subPoolID = SUBPOOLS_CNT - 1;
+            }
+            else {
+
+                _subPoolID = Count0BitsRight(pool._subPoolsWhichHaveAtLeastOneElement);
+                _idInSubPool = 0;
+            }
+        }
 
         template <typename T>
         __KO_POOL_FORCE_INLINE__ const T* NextAbstract(const KoPoolIteratable& pool) noexcept {
@@ -308,13 +318,15 @@ private:
 
                 if (_idInSubPool >= GetSubPoolSize(_subPoolID)) {
 
-                    if (_subPoolsWhichHaveAtLeastOneElement == 0) {
+                    const USize mask = (USize)1 << _subPoolID;
+                    const USize subPoolsWhichHaveAtLeastOneElement =
+                        pool._subPoolsWhichHaveAtLeastOneElement & ~(mask | (mask - 1));
+
+                    if (subPoolsWhichHaveAtLeastOneElement == 0) {
                         return nullptr;
                     }
 
-                    _subPoolID = Count0BitsRight(_subPoolsWhichHaveAtLeastOneElement);
-                    _subPoolsWhichHaveAtLeastOneElement &= ~((USize)1 << _subPoolID);
-
+                    _subPoolID = Count0BitsRight(subPoolsWhichHaveAtLeastOneElement);
                     _idInSubPool = 0;
                 }
 
@@ -379,13 +391,15 @@ private:
 
                 if (_idInSubPool >= GetSubPoolSize(_subPoolID)) {
 
-                    if (_subPoolsWhichHaveAtLeastOneElement == 0) {
+                    const USize mask = (USize)1 << _subPoolID;
+                    const USize subPoolsWhichHaveAtLeastOneElement =
+                        pool._subPoolsWhichHaveAtLeastOneElement & ~(mask | (mask - 1));
+
+                    if (subPoolsWhichHaveAtLeastOneElement == 0) {
                         return nullptr;
                     }
 
-                    _subPoolID = Count0BitsRight(_subPoolsWhichHaveAtLeastOneElement);
-                    _subPoolsWhichHaveAtLeastOneElement &= ~((USize)1 << _subPoolID);
-
+                    _subPoolID = Count0BitsRight(subPoolsWhichHaveAtLeastOneElement);
                     _idInSubPool = 0;
                 }
 
@@ -437,24 +451,6 @@ private:
             }
         }
 
-        // Must be called after Allocate...
-        __KO_POOL_FORCE_INLINE__ KoPoolIteratorCore GetFixedIteratorAfterAllocate(
-            const KoPoolIteratable& pool
-        ) const noexcept {
-
-            KoPoolIteratorCore iterator = *this;
-
-            __KO_POOL_ITERATABLE_ASSERT_TEST__(_subPoolID < KoPoolIteratable::DIGITS);
-            __KO_POOL_ITERATABLE_ASSERT_TEST__(IsPowerOf2(KoPoolIteratable::DIGITS));
-
-            const USize mask = ~(((USize)1 << _subPoolID) - 1);
-            iterator._subPoolsWhichHaveAtLeastOneElement =
-                (pool._subPoolsWhichHaveAtLeastOneElement & mask) |
-                (_subPoolsWhichHaveAtLeastOneElement & pool._subPoolsWhichHaveAtLeastOneElement);
-
-            return iterator;
-        }
-
         // Must be called immediately after Deallocate...
         __KO_POOL_FORCE_INLINE__ KoPoolIteratorCore GetFixedIteratorAfterDeallocate(
             const KoPoolIteratable& pool, const uint8_t* pDeallocatedMemory
@@ -464,11 +460,6 @@ private:
 
             __KO_POOL_ITERATABLE_ASSERT_TEST__(_subPoolID < KoPoolIteratable::DIGITS);
             __KO_POOL_ITERATABLE_ASSERT_TEST__(IsPowerOf2(KoPoolIteratable::DIGITS));
-
-            const USize mask = ~(((USize)1 << _subPoolID) - 1);
-            iterator._subPoolsWhichHaveAtLeastOneElement =
-                (pool._subPoolsWhichHaveAtLeastOneElement & mask) |
-                (_subPoolsWhichHaveAtLeastOneElement & pool._subPoolsWhichHaveAtLeastOneElement);
 
             __KO_POOL_ITERATABLE_ASSERT_TEST__(pool._pSubPools);
             if (!pool._pSubPools->pointers[_subPoolID]) {
@@ -555,7 +546,6 @@ private:
 
         USize _subPoolID = 0;
         USize _idInSubPool = std::numeric_limits<USize>::max();
-        USize _subPoolsWhichHaveAtLeastOneElement = 0;
     };
 
 private:
@@ -624,7 +614,7 @@ private:
     Opt _opt;
 };
 
-// Iterator can be invalidated, so use 'GetFixedIteratorAfterAllocate()' and 'GetFixedIteratorAfterDeallocate(...)'
+// Iterator can be invalidated, so use 'GetFixedIteratorAfterDeallocate(...)'
 template <typename T>
 class KoPoolIterator {
 public:
@@ -656,15 +646,6 @@ public:
     __KO_POOL_FORCE_INLINE__ T* Next() const noexcept {
 
         return _core.Next<T>(*_pPool);
-    }
-
-    // Must be called after Allocate...
-    __KO_POOL_FORCE_INLINE__ KoPoolIterator GetFixedIteratorAfterAllocate() const noexcept {
-
-        KoPoolIterator<T> iterator = *this;
-        iterator._core = iterator._core.GetFixedIteratorAfterAllocate(*_pPool);
-
-        return iterator;
     }
 
     // Must be called immediately after Deallocate...

@@ -90,17 +90,23 @@ private:
             std::shuffle(_datas.begin(), _datas.end(), _rng);
 
             size_t cnt = 0;
+            size_t totalCnt = SIZE;
             size_t numFixed = 0;
 
-            volatile size_t isLastActualPtr = 0;
             KoPoolIterator<Data> iterator = _pPool->GetIterator<Data>();
-            while (const Data* pData = iterator.Next()) {
+            while (Data* pData = iterator.Next()) {
 
                 cnt += pData->cnt;
                 DevAssert(cnt <= SIZE, "");
 
                 Data* pDataToRemove = _datas.back();
                 _datas.pop_back();
+
+                _set.insert(pData);
+
+                if (_set.find(pDataToRemove) == _set.end()) {
+                    totalCnt -= 1;
+                }
 
                 _pPool->Deallocate(pDataToRemove);
                 iterator = iterator.GetFixedIteratorAfterDeallocate(pDataToRemove);
@@ -112,7 +118,24 @@ private:
 
             printf("%zu\n", _datas.size());
 
-            DevAssert(cnt == SIZE, "");
+            _set.clear();
+            _datas.clear();
+
+            DevAssert(cnt == totalCnt, "");
+
+            size_t danglingCnt = 0;
+
+            iterator = _pPool->GetIterator<Data>();
+            while (Data* pData = iterator.Next()) {
+
+                danglingCnt += pData->cnt;
+
+                _pPool->Deallocate(pData);
+                iterator = iterator.GetFixedIteratorAfterDeallocate(pData);
+            }
+
+            DevAssert(totalCnt + danglingCnt == SIZE, "");
+
             _pPool->DeallocateBytesAll();
 
             printf("%zu\n", cnt);
