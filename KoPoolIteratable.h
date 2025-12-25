@@ -318,7 +318,7 @@ private:
 
                 if (_idInSubPool >= GetSubPoolSize(_subPoolID)) {
 
-                    const USize mask = (USize)1 << _subPoolID;
+                    const USize mask = static_cast<USize>(1) << _subPoolID;
                     const USize subPoolsWhichHaveAtLeastOneElement =
                         pool._subPoolsWhichHaveAtLeastOneElement & ~(mask | (mask - 1));
 
@@ -391,7 +391,7 @@ private:
 
                 if (_idInSubPool >= GetSubPoolSize(_subPoolID)) {
 
-                    const USize mask = (USize)1 << _subPoolID;
+                    const USize mask = static_cast<USize>(1) << _subPoolID;
                     const USize subPoolsWhichHaveAtLeastOneElement =
                         pool._subPoolsWhichHaveAtLeastOneElement & ~(mask | (mask - 1));
 
