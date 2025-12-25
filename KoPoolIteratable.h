@@ -300,7 +300,7 @@ private:
             }
             else {
 
-                _subPoolID = Count0BitsRight(pool._subPoolsWhichHaveAtLeastOneElement);
+                _subPoolID = Count0BitsRight(subPoolsWhichHaveAtLeastOneElement);
                 _idInSubPool = 0;
             }
         }
