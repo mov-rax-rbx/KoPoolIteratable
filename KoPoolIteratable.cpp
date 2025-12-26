@@ -2,7 +2,7 @@
 
 namespace {
 
-    void* AlignedMalloc(const size_t sizeInBytes, const size_t alignment) {
+    inline void* AlignedMalloc(const size_t sizeInBytes, const size_t alignment) noexcept {
 #if defined(_MSC_VER)
         return _aligned_malloc(sizeInBytes, alignment);
 #else
@@ -10,7 +10,7 @@ namespace {
 #endif
     }
 
-    void AlignedFree(void* ptr) {
+    inline void AlignedFree(void* ptr) noexcept {
 #if defined(_MSC_VER)
         _aligned_free(ptr);
 #else
@@ -111,6 +111,10 @@ KoPoolIteratable::AllocBytesResult KoPoolIteratable::AllocateBytes() noexcept {
         new (pSubPools) SubPools{};
 
         _pSubPools = SubPoolsUniquePtr{ pSubPools };
+    }
+
+    if (_vacantSubPools == 0) {
+        return AllocBytesResult{};
     }
 
     const USize subPoolID = Count0BitsRight(_vacantSubPools);
@@ -478,87 +482,6 @@ void KoPoolIteratable::DeallocateSubPoolMemory(SubPools& subPool, const USize su
     __KO_POOL_ITERATABLE_ASSERT_DEV__(subPool.pools[subPoolID].numUsed == 0);
     subPool.pools[subPoolID].numUsed = 0;
 #endif
-}
-
-uint32_t KoPoolIteratable::Count0BitsLeft(const uint32_t num) noexcept {
-
-#ifdef _MSC_VER
-
-    unsigned long result;
-    const uint8_t isNonZero = _BitScanReverse(&result, num);
-    return isNonZero ? 31 - static_cast<uint32_t>(result) : 32;
-#else
-
-    return num != 0
-        ? __builtin_clzl(num)
-        : 32;
-#endif
-}
-
-uint64_t KoPoolIteratable::Count0BitsLeft(const uint64_t num) noexcept {
-
-#ifdef _MSC_VER
-
-    unsigned long result;
-    const uint8_t isNonZero = _BitScanReverse64(&result, num);
-    return isNonZero ? 63 - static_cast<uint64_t>(result) : 64;
-#else
-    return num != 0
-        ? __builtin_clzll(num)
-        : 64;
-#endif
-}
-
-uint32_t KoPoolIteratable::Count0BitsRight(const uint32_t num) noexcept {
-
-#ifdef _MSC_VER
-
-    unsigned long result;
-    const uint8_t isNonZero = _BitScanForward(&result, num);
-    return isNonZero ? static_cast<uint32_t>(result) : 32;
-#else
-
-    return num != 0
-        ? __builtin_ctzl(num)
-        : 32;
-#endif
-}
-
-uint64_t KoPoolIteratable::Count0BitsRight(const uint64_t num) noexcept {
-
-#ifdef _MSC_VER
-
-    unsigned long result;
-    const uint8_t isNonZero = _BitScanForward64(&result, num);
-    return isNonZero ? static_cast<uint64_t>(result) : 64;
-#else
-
-    return num != 0
-        ? __builtin_ctzll(num)
-        : 64;
-#endif
-}
-
-KoPoolIteratable::USize KoPoolIteratable::Log2(const USize num) noexcept {
-
-    if (num == 0) {
-        return 0;
-    }
-
-    return (DIGITS - 1) - Count0BitsLeft(num);
-}
-
-KoPoolIteratable::USize KoPoolIteratable::RoundUpToPowerOf2(const USize num) noexcept {
-
-    if (num == std::numeric_limits<USize>::max()) {
-        return num;
-    }
-
-    if (IsPowerOf2(num)) {
-        return num;
-    }
-
-    return static_cast<USize>(1) << (DIGITS - Count0BitsLeft(num));
 }
 
 KoPoolIteratable::USize KoPoolIteratable::FindSubPoolIDByPtrImpl(const void* pMemory) const noexcept {

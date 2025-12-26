@@ -205,14 +205,84 @@ private:
         return num != 0 && ((num & (num - 1)) == 0);
     }
 
-    static __KO_POOL_FORCE_INLINE__ uint32_t Count0BitsLeft(const uint32_t num) noexcept;
-    static __KO_POOL_FORCE_INLINE__ uint64_t Count0BitsLeft(const uint64_t num) noexcept;
+    static __KO_POOL_FORCE_INLINE__ uint32_t Count0BitsLeft(const uint32_t num) noexcept {
 
-    static __KO_POOL_FORCE_INLINE__ uint32_t Count0BitsRight(const uint32_t num) noexcept;
-    static __KO_POOL_FORCE_INLINE__ uint64_t Count0BitsRight(const uint64_t num) noexcept;
+#ifdef _MSC_VER
 
-    static __KO_POOL_FORCE_INLINE__ USize Log2(const USize num) noexcept;
-    static __KO_POOL_FORCE_INLINE__ USize RoundUpToPowerOf2(const USize num) noexcept;
+        unsigned long result;
+        const uint8_t isNonZero = _BitScanReverse(&result, num);
+        return isNonZero ? 31 - static_cast<uint32_t>(result) : 32;
+#else
+
+        return num != 0
+            ? __builtin_clzl(num)
+            : 32;
+#endif
+    }
+
+    static __KO_POOL_FORCE_INLINE__ uint64_t Count0BitsLeft(const uint64_t num) noexcept {
+
+#ifdef _MSC_VER
+
+        unsigned long result;
+        const uint8_t isNonZero = _BitScanReverse64(&result, num);
+        return isNonZero ? 63 - static_cast<uint64_t>(result) : 64;
+#else
+        return num != 0
+            ? __builtin_clzll(num)
+            : 64;
+#endif
+    }
+
+    static __KO_POOL_FORCE_INLINE__ uint32_t Count0BitsRight(const uint32_t num) noexcept {
+
+#ifdef _MSC_VER
+
+        unsigned long result;
+        const uint8_t isNonZero = _BitScanForward(&result, num);
+        return isNonZero ? static_cast<uint32_t>(result) : 32;
+#else
+
+        return num != 0
+            ? __builtin_ctzl(num)
+            : 32;
+#endif
+    }
+
+    static __KO_POOL_FORCE_INLINE__ uint64_t Count0BitsRight(const uint64_t num) noexcept {
+
+#ifdef _MSC_VER
+
+        unsigned long result;
+        const uint8_t isNonZero = _BitScanForward64(&result, num);
+        return isNonZero ? static_cast<uint64_t>(result) : 64;
+#else
+
+        return num != 0
+            ? __builtin_ctzll(num)
+            : 64;
+#endif
+    }
+
+    static USize Log2(const USize num) noexcept {
+
+        return num == 0
+            ? 0
+            : (DIGITS - 1) - Count0BitsLeft(num);
+    }
+
+    static __KO_POOL_FORCE_INLINE__ USize RoundUpToPowerOf2(const USize num) noexcept {
+
+        if (num == std::numeric_limits<USize>::max()) {
+            return num;
+        }
+
+        if (IsPowerOf2(num)) {
+            return num;
+        }
+
+        return static_cast<USize>(1) << (DIGITS - Count0BitsLeft(num));
+    }
 
     struct PoolID {
         USize subPoolID = SUB_POOL_ID_NONE;
