@@ -536,10 +536,14 @@ KoPoolIteratable::USize KoPoolIteratable::FindSortedPointerIDByPtr(const void* p
 
 KoPoolIteratable::PoolID KoPoolIteratable::IDToPtrImpl(const USize id) const noexcept {
 
-    const USize subPoolID = IDToSubPoolIDImpl(id);
-    const USize baseID = subPoolID == 0
+    // in 2^0 we store 2 elements
+
+    const USize subPoolID = id < 2
         ? 0
-        // in 2^0 we store 2 elements
+        : IDToSubPoolIDImpl(id);
+
+    const USize baseID = id < 2
+        ? 0
         : (static_cast<USize>(1) << subPoolID);
 
     __KO_POOL_ITERATABLE_ASSERT_TEST__(_pSubPools);
@@ -567,9 +571,9 @@ KoPoolIteratable::PoolID KoPoolIteratable::PtrToIDImpl(const void* pMemory, cons
 
     __KO_POOL_ITERATABLE_ASSERT_TEST__(IsPtrInsideSubPool(pMemory, subPoolID));
 
+    // in 2^0 we store 2 elements
     const USize baseID = subPoolID == 0
         ? 0
-        // in 2^0 we store 2 elements
         : (static_cast<USize>(1) << subPoolID);
 
     const USize id = baseID + PtrToIDInSubPool(pMemory, subPoolID);
