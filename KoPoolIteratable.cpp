@@ -63,7 +63,7 @@ void KoPoolIteratable::SubPoolsUniquePtrDeleter::operator()(SubPools* ptr) const
     AlignedFree(ptr);
 }
 
-KoPoolIteratable::KoPoolIteratable(const Opt& opt) {
+KoPoolIteratable::KoPoolIteratable(const Opt& opt) noexcept {
 
     __KO_POOL_ITERATABLE_ASSERT_DEV__(IsPowerOf2(opt.elementAlignment));
     __KO_POOL_ITERATABLE_ASSERT_DEV__(opt.elementSizeInBytes >= sizeof(SkipNodeHead));

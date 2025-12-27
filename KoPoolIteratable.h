@@ -73,8 +73,8 @@ public:
         USize elementAlignment = alignof(USize);
     };
 
-    KoPoolIteratable() = default;
-    KoPoolIteratable(const Opt& opt);
+    KoPoolIteratable() noexcept = default;
+    KoPoolIteratable(const Opt& opt) noexcept;
 
     KoPoolIteratable(const KoPoolIteratable&) = delete;
     KoPoolIteratable& operator=(const KoPoolIteratable&) = delete;
@@ -83,7 +83,7 @@ public:
     KoPoolIteratable& operator=(KoPoolIteratable&&) noexcept;
 
     template <typename T, typename ...Args>
-    T* Allocate(Args&&... args) {
+    T* Allocate(Args&&... args) noexcept(std::is_nothrow_constructible_v<T>) {
 
         __KO_POOL_ITERATABLE_ASSERT_DEV__(sizeof(T) == _opt.elementSizeInBytes);
         __KO_POOL_ITERATABLE_ASSERT_DEV__(alignof(T) == _opt.elementAlignment);
@@ -100,7 +100,7 @@ public:
     }
 
     template <typename T>
-    T* Allocate(T&& data) {
+    T* Allocate(T&& data) noexcept(std::is_nothrow_move_assignable_v<T>) {
 
         __KO_POOL_ITERATABLE_ASSERT_DEV__(sizeof(T) == _opt.elementSizeInBytes);
         __KO_POOL_ITERATABLE_ASSERT_DEV__(alignof(T) == _opt.elementAlignment);
@@ -117,7 +117,7 @@ public:
     }
 
     template <typename T>
-    void Deallocate(T* pMemory) noexcept {
+    void Deallocate(T* pMemory) noexcept(std::is_nothrow_destructible_v<T>) {
 
         if (!pMemory) {
             return;
@@ -136,7 +136,7 @@ public:
     }
 
     template <typename T>
-    void DeallocateBySubPoolID(T* pMemory, const USize subPoolID) noexcept {
+    void DeallocateBySubPoolID(T* pMemory, const USize subPoolID) noexcept(std::is_nothrow_destructible_v<T>) {
 
         __KO_POOL_ITERATABLE_ASSERT_DEV__(subPoolID != SUB_POOL_ID_NONE);
         __KO_POOL_ITERATABLE_ASSERT_DEV__(IsPtrInsideSubPool(pMemory, subPoolID));
@@ -361,7 +361,7 @@ private:
     class KoPoolIteratorCore {
     public:
 
-        KoPoolIteratorCore(const KoPoolIteratable& pool) {
+        KoPoolIteratorCore(const KoPoolIteratable& pool) noexcept {
 
             const USize subPoolsWhichHaveAtLeastOneElement = pool._subPoolsWhichHaveAtLeastOneElement;
             if (subPoolsWhichHaveAtLeastOneElement == 0) {
@@ -689,7 +689,7 @@ template <typename T>
 class KoPoolIterator {
 public:
 
-    KoPoolIterator(const KoPoolIteratable& pool)
+    KoPoolIterator(const KoPoolIteratable& pool) noexcept
         : _core(pool)
         , _pPool(&pool)
     {}
