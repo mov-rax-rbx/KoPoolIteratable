@@ -100,7 +100,7 @@ public:
     }
 
     template <typename T>
-    T* Allocate(T&& data) noexcept(std::is_nothrow_move_assignable_v<T>) {
+    T* Allocate(T&& data) noexcept(std::is_nothrow_move_constructible_v<T>) {
 
         __KO_POOL_ITERATABLE_ASSERT_DEV__(sizeof(T) == _opt.elementSizeInBytes);
         __KO_POOL_ITERATABLE_ASSERT_DEV__(alignof(T) == _opt.elementAlignment);
